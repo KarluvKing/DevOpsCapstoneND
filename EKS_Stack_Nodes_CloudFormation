@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  EKS nodes (AMI family: AmazonLinux2, SSH access: false, private networking:
+  false) [created and managed by eksctl]
+Resources:
+  EgressInterCluster:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      Description: >-
+        Allow control plane to communicate with worker nodes in group
+        ng-546b2dbb (kubelet and workload TCP ports)
+      DestinationSecurityGroupId: !Ref SG
+      FromPort: 1025
+      GroupId: !ImportValue 'eksctl-ridiculous-gopher-1567626994-cluster::SecurityGroup'
+      IpProtocol: tcp
+      ToPort: 65535
+  EgressInterClusterAPI:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      Description: >-
+        Allow control plane to communicate with worker nodes in group
+        ng-546b2dbb (workloads using HTTPS port, commonly used with extension
+        API servers)
+      DestinationSecurityGroupId: !Ref SG
+      FromPort: 443
+      GroupId: !ImportValue 'eksctl-ridiculous-gopher-1567626994-cluster::SecurityGroup'
+      IpProtocol: tcp
+      ToPort: 443
+  IngressInterCluster:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: >-
+        Allow worker nodes in group ng-546b2dbb to communicate with control
+        plane (kubelet and workload TCP ports)
+      FromPort: 1025
+      GroupId: !Ref SG
+      IpProtocol: tcp
+      SourceSecurityGroupId: !ImportValue 'eksctl-ridiculous-gopher-1567626994-cluster::SecurityGroup'
+      ToPort: 65535
+  IngressInterClusterAPI:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: >-
+        Allow worker nodes in group ng-546b2dbb to communicate with control
+        plane (workloads using HTTPS port, commonly used with extension API
+        servers)
+      FromPort: 443
+      GroupId: !Ref SG
+      IpProtocol: tcp
+      SourceSecurityGroupId: !ImportValue 'eksctl-ridiculous-gopher-1567626994-cluster::SecurityGroup'
+      ToPort: 443
+  IngressInterClusterCP:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: >-
+        Allow control plane to receive API requests from worker nodes in group
+        ng-546b2dbb
+      FromPort: 443
+      GroupId: !ImportValue 'eksctl-ridiculous-gopher-1567626994-cluster::SecurityGroup'
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref SG
+      ToPort: 443
+  NodeGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: !Sub '${AWS::StackName}'
+        Version: !GetAtt NodeGroupLaunchTemplate.LatestVersionNumber
+      MaxSize: '2'
+      MinSize: '2'
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: 'true'
+          Value: ridiculous-gopher-1567626994-ng-546b2dbb-Node
+        - Key: kubernetes.io/cluster/ridiculous-gopher-1567626994
+          PropagateAtLaunch: 'true'
+          Value: owned
+      VPCZoneIdentifier: !Split 
+        - ','
+        - !ImportValue 'eksctl-ridiculous-gopher-1567626994-cluster::SubnetsPublic'
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: '1'
+        MinInstancesInService: '0'
+  NodeGroupLaunchTemplate:
+    Type: 'AWS::EC2::LaunchTemplate'
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn: !GetAtt NodeInstanceProfile.Arn
+        ImageId: ami-00b95829322267382
+        InstanceType: m5.large
+        NetworkInterfaces:
+          - AssociatePublicIpAddress: true
+            DeviceIndex: 0
+            Groups:
+              - !ImportValue >-
+                eksctl-ridiculous-gopher-1567626994-cluster::SharedNodeSecurityGroup
+              - !Ref SG
+        UserData: >-
+          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
+      LaunchTemplateName: !Sub '${AWS::StackName}'
+  NodeInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref NodeInstanceRole
+  NodeInstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy'
+        - 'arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy'
+        - 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly'
+      Path: /
+  SG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: >-
+        Communication between the control plane and worker nodes in group
+        ng-546b2dbb
+      Tags:
+        - Key: kubernetes.io/cluster/ridiculous-gopher-1567626994
+          Value: owned
+        - Key: Name
+          Value: !Sub '${AWS::StackName}/SG'
+      VpcId: !ImportValue 'eksctl-ridiculous-gopher-1567626994-cluster::VPC'
+Outputs:
+  FeatureLocalSecurityGroup:
+    Value: true
+  FeaturePrivateNetworking:
+    Value: false
+  FeatureSharedSecurityGroup:
+    Value: true
+  InstanceProfileARN:
+    Export:
+      Name: !Sub '${AWS::StackName}::InstanceProfileARN'
+    Value: !GetAtt NodeInstanceProfile.Arn
+  InstanceRoleARN:
+    Export:
+      Name: !Sub '${AWS::StackName}::InstanceRoleARN'
+    Value: !GetAtt NodeInstanceRole.Arn
