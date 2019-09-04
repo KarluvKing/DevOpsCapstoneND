@@ -1,5 +1,5 @@
 # DevOpsCapstoneND
-DevOpsCapstoneND
+Capstone project - Cloud DevOps Engineer by Udacity
 
 Python application code used for this Capstone was forked from mtobeiyf/keras-flask-deploy-webapp
 
